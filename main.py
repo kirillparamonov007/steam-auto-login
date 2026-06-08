@@ -8,14 +8,14 @@ from tkinter import filedialog, messagebox, ttk, scrolledtext
 
 from config import load_config, save_config, CONFIG_PATH, BASE_DIR
 from mafile import code_from_mafile, seconds_until_next_code
-from steam_login import find_steam_exe, login_and_launch_game, kill_steam_processes
+from steam_login import find_steam_exe, login_steam_only, login_and_launch_game, kill_steam_processes
 
 
 class SteamAutoLoginApp:
     def __init__(self, root):
         self.root = root
         root.title("Steam Auto Login")
-        root.geometry("1000x750")
+        root.geometry("1000x800")
         self.root.resizable(True, True)
 
         self.config = load_config()
@@ -106,8 +106,20 @@ class SteamAutoLoginApp:
             row=1, column=1, sticky="ew", padx=(0, 5), pady=5
         )
 
-        ttk.Label(settings_frame, text="Задержка ДО игры (сек):").grid(
+        ttk.Label(settings_frame, text="Загрузка Steam (сек):").grid(
             row=2, column=0, sticky="w", padx=(0, 5), pady=5
+        )
+        self.pre_login_delay_var = tk.StringVar(
+            value=str(
+                self.config.get("settings", {}).get("pre_login_delay", 15)
+            )
+        )
+        ttk.Entry(settings_frame, textvariable=self.pre_login_delay_var).grid(
+            row=2, column=1, sticky="ew", padx=(0, 5), pady=5
+        )
+
+        ttk.Label(settings_frame, text="Авторизация Steam (сек):").grid(
+            row=3, column=0, sticky="w", padx=(0, 5), pady=5
         )
         self.steam_delay_var = tk.StringVar(
             value=str(
@@ -115,11 +127,11 @@ class SteamAutoLoginApp:
             )
         )
         ttk.Entry(settings_frame, textvariable=self.steam_delay_var).grid(
-            row=2, column=1, sticky="ew", padx=(0, 5), pady=5
+            row=3, column=1, sticky="ew", padx=(0, 5), pady=5
         )
 
-        ttk.Label(settings_frame, text="Задержка ПОСЛЕ запуска игры (сек):").grid(
-            row=3, column=0, sticky="w", padx=(0, 5), pady=5
+        ttk.Label(settings_frame, text="Время в игре (сек):").grid(
+            row=4, column=0, sticky="w", padx=(0, 5), pady=5
         )
         self.game_delay_var = tk.StringVar(
             value=str(
@@ -127,7 +139,7 @@ class SteamAutoLoginApp:
             )
         )
         ttk.Entry(settings_frame, textvariable=self.game_delay_var).grid(
-            row=3, column=1, sticky="ew", padx=(0, 5), pady=5
+            row=4, column=1, sticky="ew", padx=(0, 5), pady=5
         )
 
         settings_frame.columnconfigure(1, weight=1)
@@ -137,11 +149,18 @@ class SteamAutoLoginApp:
         action_frame.pack(fill="x", padx=0, pady=(0, 10))
         self.start_btn = ttk.Button(
             action_frame,
-            text="▶ Запустить",
+            text="▶ Запустить с игрой",
             command=self._start_login_sequence,
             state="normal",
         )
         self.start_btn.pack(side="left", padx=(0, 5), fill="x", expand=True)
+        self.start_login_only_btn = ttk.Button(
+            action_frame,
+            text="▶ Только Steam",
+            command=self._start_steam_only_sequence,
+            state="normal",
+        )
+        self.start_login_only_btn.pack(side="left", padx=(0, 5), fill="x", expand=True)
         self.stop_btn = ttk.Button(
             action_frame,
             text="⏹ Остановить",
@@ -246,9 +265,10 @@ class SteamAutoLoginApp:
     def _save_settings(self):
         """Сохранить настройки."""
         try:
+            pre_login_delay = int(self.pre_login_delay_var.get())
             steam_delay = int(self.steam_delay_var.get())
             game_delay = int(self.game_delay_var.get())
-            if steam_delay < 1 or game_delay < 1:
+            if pre_login_delay < 1 or steam_delay < 1 or game_delay < 1:
                 raise ValueError("Задержки должны быть >= 1")
         except ValueError as e:
             messagebox.showerror("Ошибка", f"Неверные задержки: {e}")
@@ -257,20 +277,21 @@ class SteamAutoLoginApp:
         self.config["settings"] = {
             "steam_exe_path": self.steam_path_var.get(),
             "game_app_id": self.app_id_var.get(),
+            "pre_login_delay": pre_login_delay,
             "steam_startup_delay": steam_delay,
             "game_launch_delay": game_delay,
             "mafiles_dir": self.config["settings"].get("mafiles_dir", "mafiles"),
         }
         save_config(self.config)
-        total_delay = steam_delay + game_delay
+        total_delay = pre_login_delay + steam_delay + game_delay
         messagebox.showinfo(
             "Успех",
-            f"Настройки сохранены\nОбщая задержка: {total_delay}с"
+            f"Настройки сохранены\nОбщее время на аккаунт (с игрой): {total_delay}с"
         )
         self._log(f"Настройки сохранены (общее время: {total_delay}с)")
 
     def _start_login_sequence(self):
-        """Начать последовательный вход в аккаунты."""
+        """Начать последовательный вход в аккаунты С ЗАПУСКОМ ИГРЫ."""
         selected_logins = [
             login for login, var in self.account_vars.items() if var.get()
         ]
@@ -280,13 +301,36 @@ class SteamAutoLoginApp:
 
         self.running = True
         self.start_btn.config(state="disabled")
+        self.start_login_only_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
         self._log(
-            f"\n=== Запуск последовательности для {len(selected_logins)} аккаунт(о)в ==="
+            f"\n=== Запуск последовательности (С ИГРОЙ) для {len(selected_logins)} аккаунт(о)в ==="
         )
 
         thread = threading.Thread(
-            target=self._login_sequence_worker, args=(selected_logins,), daemon=True
+            target=self._login_sequence_worker, args=(selected_logins, True), daemon=True
+        )
+        thread.start()
+
+    def _start_steam_only_sequence(self):
+        """Начать последовательный вход в аккаунты БЕЗ ЗАПУСКА ИГРЫ."""
+        selected_logins = [
+            login for login, var in self.account_vars.items() if var.get()
+        ]
+        if not selected_logins:
+            messagebox.showwarning("Внимание", "Выбери хотя бы один аккаунт")
+            return
+
+        self.running = True
+        self.start_btn.config(state="disabled")
+        self.start_login_only_btn.config(state="disabled")
+        self.stop_btn.config(state="normal")
+        self._log(
+            f"\n=== Запуск последовательности (ТОЛЬКО STEAM) для {len(selected_logins)} аккаунт(о)в ==="
+        )
+
+        thread = threading.Thread(
+            target=self._login_sequence_worker, args=(selected_logins, False), daemon=True
         )
         thread.start()
 
@@ -296,15 +340,17 @@ class SteamAutoLoginApp:
         self._log("\nОстановка...")
         kill_steam_processes()
         self.start_btn.config(state="normal")
+        self.start_login_only_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
 
-    def _login_sequence_worker(self, selected_logins):
+    def _login_sequence_worker(self, selected_logins, with_game=True):
         """Рабочий поток для последовательного входа."""
         try:
             steam_exe = find_steam_exe(
                 self.config["settings"].get("steam_exe_path", "")
             )
             app_id = self.config["settings"].get("game_app_id", "420980")
+            pre_login_delay = self.config["settings"].get("pre_login_delay", 15)
             steam_delay = self.config["settings"].get("steam_startup_delay", 40)
             game_delay = self.config["settings"].get("game_launch_delay", 10)
             mafiles_dir = BASE_DIR / self.config["settings"].get(
@@ -322,17 +368,30 @@ class SteamAutoLoginApp:
                     continue
 
                 try:
-                    # Логин и запуск
-                    login_and_launch_game(
-                        steam_exe,
-                        login,
-                        acc["password"],
-                        app_id,
-                        str(mafiles_dir),
-                        steam_startup_delay=steam_delay,
-                        game_launch_delay=game_delay,
-                        status_callback=self._log,
-                    )
+                    if with_game:
+                        # Логин и запуск ИГРЫ
+                        login_and_launch_game(
+                            steam_exe,
+                            login,
+                            acc["password"],
+                            app_id,
+                            str(mafiles_dir),
+                            pre_login_delay=pre_login_delay,
+                            steam_startup_delay=steam_delay,
+                            game_launch_delay=game_delay,
+                            status_callback=self._log,
+                        )
+                    else:
+                        # Логин БЕЗ ИГРЫ
+                        login_steam_only(
+                            steam_exe,
+                            login,
+                            acc["password"],
+                            str(mafiles_dir),
+                            pre_login_delay=pre_login_delay,
+                            login_hold_delay=game_delay,
+                            status_callback=self._log,
+                        )
 
                 except Exception as e:
                     self._log(f"✗ Ошибка для {login}: {e}")
@@ -350,6 +409,7 @@ class SteamAutoLoginApp:
 
         finally:
             self.start_btn.config(state="normal")
+            self.start_login_only_btn.config(state="normal")
             self.stop_btn.config(state="disabled")
             self.running = False
 

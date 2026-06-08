@@ -85,26 +85,24 @@ def kill_steam_processes():
         print(f"Ошибка при закрытии Steam: {e}")
 
 
-def login_and_launch_game(
+def login_steam_only(
     steam_exe,
     login,
     password,
-    app_id,
     mafiles_dir,
-    steam_startup_delay=40,
-    game_launch_delay=10,
+    pre_login_delay=15,
+    login_hold_delay=10,
     status_callback=None,
 ):
-    """Логин в Steam, запуск игры и ожидание.
+    """Запустить Steam и залогиниться БЕЗ запуска игры.
 
     Args:
         steam_exe: путь к steam.exe
         login: Steam логин
         password: Steam пароль
-        app_id: App ID игры (например, 420980 для Bongo Cat)
         mafiles_dir: директория с .maFile файлами
-        steam_startup_delay: задержка ДО запуска игры (дает время на загрузку Steam)
-        game_launch_delay: задержка ПОСЛЕ запуска игры (время игры)
+        pre_login_delay: задержка ДО ввода логина/пароля (дает время на загрузку Steam)
+        login_hold_delay: задержка ПОСЛЕ ввода логина (сколько держать Steam открытым)
         status_callback: функция для логирования статуса
     """
 
@@ -135,12 +133,94 @@ def login_and_launch_game(
         log(f"[{login}] Код получен: {code}")
 
         # Запустить Steam с логином
-        log(f"[{login}] Запуск Steam с логином...")
+        log(f"[{login}] Запуск Steam...")
+        subprocess.Popen(f'"{steam_exe}"')
+        log(f"[{login}] Ожидание загрузки Steam ({pre_login_delay}с)...")
+        time.sleep(pre_login_delay)
+        
+        log(f"[{login}] Ввод логина/пароля/кода...")
+        steam_cmd = f'"{steam_exe}" -login {login} {password} -steamguard {code}'
+        subprocess.Popen(steam_cmd, shell=True)
+
+        # Держать Steam открытым
+        log(f"[{login}] Steam залогинен, ждем {login_hold_delay}с...")
+        time.sleep(login_hold_delay)
+
+        # Выход
+        log(f"[{login}] Закрытие Steam...")
+        kill_steam_processes()
+        time.sleep(1)
+
+        log(f"[{login}] ✓ Завершено")
+
+    except Exception as e:
+        log(f"[{login}] ✗ Ошибка: {e}")
+        raise
+
+
+def login_and_launch_game(
+    steam_exe,
+    login,
+    password,
+    app_id,
+    mafiles_dir,
+    pre_login_delay=15,
+    steam_startup_delay=40,
+    game_launch_delay=10,
+    status_callback=None,
+):
+    """Логин в Steam, запуск игры и ожидание.
+
+    Args:
+        steam_exe: путь к steam.exe
+        login: Steam логин
+        password: Steam пароль
+        app_id: App ID игры (например, 420980 для Bongo Cat)
+        mafiles_dir: директория с .maFile файлами
+        pre_login_delay: задержка ДО ввода логина/пароля (дает время на загрузку Steam)
+        steam_startup_delay: задержка между вводом кода и запуском игры
+        game_launch_delay: задержка ПОСЛЕ запуска игры (время в игре)
+        status_callback: функция для логирования статуса
+    """
+
+    def log(msg):
+        if status_callback:
+            status_callback(msg)
+        print(msg)
+
+    try:
+        # Убить старые процессы Steam
+        log(f"[{login}] Закрытие старых процессов Steam...")
+        kill_steam_processes()
+        time.sleep(2)
+
+        # Найти .maFile по логину
+        log(f"[{login}] Поиск .maFile в папке mafiles/...")
+        mafile_path = find_mafile_by_login(login, mafiles_dir)
+        log(f"[{login}] Найден: {Path(mafile_path).name}")
+
+        # Получить Steam Guard код
+        log(f"[{login}] Получение Steam Guard кода...")
+        secs = seconds_until_next_code()
+        if secs < 5:
+            log(f"[{login}] Ожидание свежего кода ({secs}с)...")
+            time.sleep(secs + 1)
+
+        code = code_from_mafile(mafile_path)
+        log(f"[{login}] Код получен: {code}")
+
+        # Запустить Steam
+        log(f"[{login}] Запуск Steam...")
+        subprocess.Popen(f'"{steam_exe}"')
+        log(f"[{login}] Ожидание загрузки Steam ({pre_login_delay}с)...")
+        time.sleep(pre_login_delay)
+        
+        log(f"[{login}] Ввод логина/пароля/кода...")
         steam_cmd = f'"{steam_exe}" -login {login} {password} -steamguard {code}'
         subprocess.Popen(steam_cmd, shell=True)
         
-        # Ожидание загрузки Steam ДО запуска игры
-        log(f"[{login}] Ожидание загрузки Steam ({steam_startup_delay}с)...")
+        # Ожидание авторизации и загрузки Steam
+        log(f"[{login}] Ожидание авторизации Steam ({steam_startup_delay}с)...")
         time.sleep(steam_startup_delay)
 
         # Запустить игру через App ID

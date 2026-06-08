@@ -39,6 +39,35 @@ def find_steam_exe(custom_path=""):
     raise FileNotFoundError("steam.exe не найден")
 
 
+def find_mafile_by_login(login, mafiles_dir):
+    """Найти .maFile по логину аккаунта в директории mafiles.
+    
+    Ищет файл с именем вида: {login}.maFile
+    """
+    mafiles_path = Path(mafiles_dir)
+    if not mafiles_path.exists():
+        raise FileNotFoundError(f"Папка mafiles не найдена: {mafiles_path}")
+    
+    # Ищем файл: login.maFile
+    mafile = mafiles_path / f"{login}.maFile"
+    if mafile.exists():
+        return str(mafile)
+    
+    # Если не нашли точное совпадение, показываем что есть
+    existing_files = list(mafiles_path.glob("*.maFile"))
+    if existing_files:
+        files_list = ", ".join([f.name for f in existing_files])
+        raise FileNotFoundError(
+            f"maFile для аккаунта '{login}' не найден.\n"
+            f"Ищу: {login}.maFile\n"
+            f"Найдено в папке: {files_list}"
+        )
+    else:
+        raise FileNotFoundError(
+            f"Папка mafiles пуста. Положите файл {login}.maFile туда."
+        )
+
+
 def kill_steam_processes():
     """Убить все процессы Steam."""
     try:
@@ -61,7 +90,7 @@ def login_and_launch_game(
     login,
     password,
     app_id,
-    get_code_func,
+    mafiles_dir,
     launch_delay=10,
     status_callback=None,
 ):
@@ -72,7 +101,7 @@ def login_and_launch_game(
         login: Steam логин
         password: Steam пароль
         app_id: App ID игры (например, 420980 для Bongo Cat)
-        get_code_func: функция для получения Steam Guard кода
+        mafiles_dir: директория с .maFile файлами
         launch_delay: задержка в секундах после запуска игры
         status_callback: функция для логирования статуса
     """
@@ -88,6 +117,11 @@ def login_and_launch_game(
         kill_steam_processes()
         time.sleep(2)
 
+        # Найти .maFile по логину
+        log(f"[{login}] Поиск .maFile в папке mafiles/...")
+        mafile_path = find_mafile_by_login(login, mafiles_dir)
+        log(f"[{login}] Найден: {Path(mafile_path).name}")
+
         # Получить Steam Guard код
         log(f"[{login}] Получение Steam Guard кода...")
         secs = seconds_until_next_code()
@@ -95,7 +129,7 @@ def login_and_launch_game(
             log(f"[{login}] Ожидание свежего кода ({secs}с)...")
             time.sleep(secs + 1)
 
-        code = get_code_func()
+        code = code_from_mafile(mafile_path)
         log(f"[{login}] Код получен: {code}")
 
         # Запустить Steam с логином

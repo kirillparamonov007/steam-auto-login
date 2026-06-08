@@ -214,7 +214,7 @@ class SteamAutoLoginApp:
             messagebox.showwarning("Внимание", "Выбери аккаунт для удаления")
             return
 
-        if messagebox.askyesno("Удалить", f"Удалить {len(selected)} аккаунт(ов)?"):
+        if messagebox.askyesno("Удалить", f"Удалить {len(selected)} аккаунт(о)в?"):
             self.config["accounts"] = [
                 acc
                 for acc in self.config["accounts"]
@@ -222,7 +222,7 @@ class SteamAutoLoginApp:
             ]
             save_config(self.config)
             self._load_accounts()
-            self._log(f"Удалено {len(selected)} аккаунт(ов)")
+            self._log(f"Удалено {len(selected)} аккаунт(о)в")
 
     def _on_account_added(self, account_data):
         """Обработка добавления нового аккаунта."""
@@ -264,7 +264,7 @@ class SteamAutoLoginApp:
         self.start_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
         self._log(
-            f"\n=== Запуск последовательности для {len(selected_logins)} аккаунт(ов) ==="
+            f"\n=== Запуск последовательности для {len(selected_logins)} аккаунт(о)в ==="
         )
 
         thread = threading.Thread(
@@ -303,25 +303,13 @@ class SteamAutoLoginApp:
                     continue
 
                 try:
-                    # Получить функцию для кода
-                    mafile_path = acc.get("mafile")
-                    if not mafile_path:
-                        raise ValueError("maFile не указан")
-
-                    full_mafile_path = mafiles_dir / Path(mafile_path).name
-                    if not full_mafile_path.exists():
-                        raise FileNotFoundError(f"maFile не найден: {full_mafile_path}")
-
-                    def get_code():
-                        return code_from_mafile(str(full_mafile_path))
-
                     # Логин и запуск
                     login_and_launch_game(
                         steam_exe,
                         login,
                         acc["password"],
                         app_id,
-                        get_code,
+                        str(mafiles_dir),
                         launch_delay=delay,
                         status_callback=self._log,
                     )
@@ -347,14 +335,14 @@ class SteamAutoLoginApp:
 
 
 class AccountDialog:
-    """Диалог для добавления/редактирования аккаунта."""
+    """Диалог для добавления нового аккаунта."""
 
     def __init__(self, parent, on_save):
         self.on_save = on_save
 
         win = tk.Toplevel(parent)
         win.title("Добавить аккаунт")
-        win.geometry("450x350")
+        win.geometry("450x250")
         win.transient(parent)
         win.grab_set()
         self.win = win
@@ -376,43 +364,24 @@ class AccountDialog:
         self.password_var = tk.StringVar()
         add_row(2, "Пароль:", ttk.Entry(win, textvariable=self.password_var, show="*"))
 
-        # Выбор .maFile
-        mafile_frame = ttk.Frame(win)
-        self.mafile_var = tk.StringVar()
-        ttk.Entry(mafile_frame, textvariable=self.mafile_var).pack(
-            side="left", fill="x", expand=True
-        )
-        ttk.Button(mafile_frame, text="...", command=self._browse_mafile, width=3).pack(
-            side="left", padx=3
-        )
-        add_row(3, "Выбери .maFile:", mafile_frame)
-
         hint = ttk.Label(
             win,
-            text=".maFile должен лежать в папке 'mafiles' рядом с программой.",
+            text="⚠ .maFile должен быть в папке 'mafiles' с именем: {login}.maFile\n"
+                 "Например: qwerty.maFile для логина 'qwerty'",
             foreground="gray",
+            justify="left",
         )
-        hint.grid(row=4, column=0, columnspan=2, padx=10, pady=10, sticky="w")
+        hint.grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="w")
 
         # Кнопки
         btn_frame = ttk.Frame(win)
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=15)
+        btn_frame.grid(row=4, column=0, columnspan=2, pady=15)
         ttk.Button(btn_frame, text="Сохранить", command=self._save).pack(
             side="left", padx=5
         )
         ttk.Button(btn_frame, text="Отмена", command=win.destroy).pack(
             side="left", padx=5
         )
-
-    def _browse_mafile(self):
-        """Выбрать .maFile."""
-        path = filedialog.askopenfilename(
-            title="Выбери .maFile",
-            filetypes=[("Steam Mobile Authenticator", "*.maFile"), ("All files", "*.*")],
-            initialdir=str(BASE_DIR / "mafiles"),
-        )
-        if path:
-            self.mafile_var.set(Path(path).name)
 
     def _save(self):
         """Сохранить аккаунт."""
@@ -422,15 +391,15 @@ class AccountDialog:
         if not self.login_var.get().strip():
             messagebox.showwarning("Внимание", "Введи логин Steam", parent=self.win)
             return
-        if not self.mafile_var.get().strip():
-            messagebox.showwarning("Внимание", "Выбери .maFile", parent=self.win)
+        if not self.password_var.get():
+            messagebox.showwarning("Внимание", "Введи пароль", parent=self.win)
             return
 
         data = {
             "label": self.label_var.get().strip(),
             "login": self.login_var.get().strip(),
             "password": self.password_var.get(),
-            "mafile": self.mafile_var.get().strip(),
+            "mafile": None,  # Больше не используется, ищется по логину
         }
         self.on_save(data)
         self.win.destroy()

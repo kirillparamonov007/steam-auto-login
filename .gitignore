@@ -1,0 +1,10 @@
+accounts.json
+mafiles/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.DS_Store
+*.log

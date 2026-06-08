@@ -1,0 +1,28 @@
+{
+  "accounts": [
+    {
+      "label": "Основной аккаунт",
+      "login": "my_steam_login",
+      "password": "my_password",
+      "mafile": "main.maFile"
+    },
+    {
+      "label": "Альт 1",
+      "login": "alt_login_1",
+      "password": "alt_password_1",
+      "mafile": "alt1.maFile"
+    },
+    {
+      "label": "Альт 2",
+      "login": "alt_login_2",
+      "password": "alt_password_2",
+      "mafile": "alt2.maFile"
+    }
+  ],
+  "settings": {
+    "steam_exe_path": "C:\\Program Files (x86)\\Steam\\steam.exe",
+    "game_app_id": "420980",
+    "game_launch_delay": 10,
+    "mafiles_dir": "mafiles"
+  }
+}

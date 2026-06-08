@@ -91,7 +91,8 @@ def login_and_launch_game(
     password,
     app_id,
     mafiles_dir,
-    launch_delay=10,
+    steam_startup_delay=40,
+    game_launch_delay=10,
     status_callback=None,
 ):
     """Логин в Steam, запуск игры и ожидание.
@@ -102,7 +103,8 @@ def login_and_launch_game(
         password: Steam пароль
         app_id: App ID игры (например, 420980 для Bongo Cat)
         mafiles_dir: директория с .maFile файлами
-        launch_delay: задержка в секундах после запуска игры
+        steam_startup_delay: задержка ДО запуска игры (дает время на загрузку Steam)
+        game_launch_delay: задержка ПОСЛЕ запуска игры (время игры)
         status_callback: функция для логирования статуса
     """
 
@@ -136,15 +138,18 @@ def login_and_launch_game(
         log(f"[{login}] Запуск Steam с логином...")
         steam_cmd = f'"{steam_exe}" -login {login} {password} -steamguard {code}'
         subprocess.Popen(steam_cmd, shell=True)
-        time.sleep(3)  # Дать Steam время на запуск
+        
+        # Ожидание загрузки Steam ДО запуска игры
+        log(f"[{login}] Ожидание загрузки Steam ({steam_startup_delay}с)...")
+        time.sleep(steam_startup_delay)
 
         # Запустить игру через App ID
         log(f"[{login}] Запуск игры (App ID: {app_id})...")
         subprocess.Popen(f"steam://run/{app_id}")
 
-        # Ожидание
-        log(f"[{login}] Игра запущена, ожидание {launch_delay}с...")
-        time.sleep(launch_delay)
+        # Ожидание игры
+        log(f"[{login}] Игра запущена, ожидание {game_launch_delay}с...")
+        time.sleep(game_launch_delay)
 
         # Выход
         log(f"[{login}] Закрытие Steam...")
